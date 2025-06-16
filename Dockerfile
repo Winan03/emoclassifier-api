@@ -1,26 +1,42 @@
 
-# Usa una imagen base de Python 3.10 (NO 3.13)
-FROM python:3.10-slim
+# Usar imagen base más liviana
+FROM python:3.9-slim
 
-# Establece el directorio de trabajo dentro del contenedor
+# Configurar variables de entorno para optimizar memoria
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV TF_CPP_MIN_LOG_LEVEL=2
+ENV OMP_NUM_THREADS=1
+ENV TF_NUM_INTEROP_THREADS=1
+ENV TF_NUM_INTRAOP_THREADS=1
+
+# Instalar dependencias del sistema mínimas
+RUN apt-get update && apt-get install -y \
+    libsndfile1 \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Crear directorio de trabajo
 WORKDIR /app
 
-# Copia solo los archivos necesarios (sin la carpeta models/)
+# Copiar requirements primero para aprovechar cache de Docker
 COPY requirements.txt .
-COPY app.py .
-COPY utils/ ./utils/
-COPY templates/ ./templates/
-COPY static/ ./static/
 
-# Instala las dependencias del sistema requeridas por librosa y soundfile
-RUN apt-get update && apt-get install -y ffmpeg libsndfile1 gcc && rm -rf /var/lib/apt/lists/*
+# Instalar dependencias Python con optimizaciones
+RUN pip install --no-cache-dir \
+    --disable-pip-version-check \
+    -r requirements.txt
 
-# Instala las dependencias del proyecto
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+# Copiar código de la aplicación
+COPY . .
 
-# Expone el puerto que usará tu app
+# Crear usuario no-root para seguridad
+RUN useradd --create-home --shell /bin/bash app && \
+    chown -R app:app /app
+USER app
+
+# Exponer puerto
 EXPOSE 5000
 
-# Comando para iniciar la app
-CMD ["python", "app.py"]
+# Comando optimizado para producción
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "2", "--worker-class", "sync", "--timeout", "120", "--max-requests", "100", "--max-requests-jitter", "10", "app:app"]
