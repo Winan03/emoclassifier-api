@@ -16,6 +16,7 @@ if not os.path.exists(MODEL_PATH):
     url = f'https://drive.google.com/uc?id={MODEL_ID}'
     gdown.download(url, MODEL_PATH, quiet=False)
     print("¡Modelo descargado!")
+    print("Tamaño del archivo descargado:", os.path.getsize('models/emotion_vgg16.keras'), "bytes")
 else:
     print("Modelo ya existe. No se descarga.")
 
