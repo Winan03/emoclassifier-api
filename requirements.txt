@@ -1,9 +1,10 @@
 Flask==2.3.3
 Flask-Cors==4.0.0
 numpy==1.23.5
-tensorflow==2.10.0
-librosa==0.10.1
-matplotlib==3.7.1
-opencv-python-headless==4.8.1.78
-soundfile==0.12.1
-gdown==4.7.1
+tensorflow==2.11.0
+librosa
+matplotlib
+opencv-python-headless
+soundfile
+gdown
+setuptools
