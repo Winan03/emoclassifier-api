@@ -3,6 +3,7 @@ import os
 import io
 import tempfile
 import base64
+import requests
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import joblib
@@ -20,9 +21,9 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 app = Flask(__name__, template_folder='templates', static_folder='static')
 CORS(app)
 
-# --- RUTAS DEL MODELO ---
-MODEL_PATH = 'models/emotion_vgg16.keras'
-LABELS_PATH = 'models/label_encoder.pkl'
+# --- URLS DE S3 ---
+MODEL_S3_URL = 'https://emoclassifier.s3.us-east-2.amazonaws.com/emotion_vgg16.keras'
+LABELS_S3_URL = 'https://emoclassifier.s3.us-east-2.amazonaws.com/label_encoder.pkl'  # Asegúrate de subir también este archivo
 
 model = None
 emotion_labels = None
@@ -30,18 +31,49 @@ emotion_labels = None
 def load_model_and_labels():
     global model, emotion_labels
     try:
-        print(f"Cargando modelo desde: {MODEL_PATH}")
-        model = tf.keras.models.load_model(MODEL_PATH)
-        print("Modelo cargado exitosamente.")
+        # Descargar modelo desde S3
+        print(f"Descargando modelo desde S3: {MODEL_S3_URL}")
+        model_response = requests.get(MODEL_S3_URL, timeout=120)
+        model_response.raise_for_status()
+        
+        # Crear archivo temporal para el modelo
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.keras') as tmp_model:
+            tmp_model.write(model_response.content)
+            tmp_model_path = tmp_model.name
+        
+        # Cargar modelo desde archivo temporal
+        print("Cargando modelo en TensorFlow...")
+        model = tf.keras.models.load_model(tmp_model_path)
+        print("✅ Modelo cargado exitosamente desde S3.")
         print(f"Forma de entrada esperada: {model.input_shape}")
-
-        print(f"Cargando etiquetas desde: {LABELS_PATH}")
-        with open(LABELS_PATH, 'rb') as f:
+        
+        # Limpiar archivo temporal del modelo
+        os.remove(tmp_model_path)
+        
+        # Descargar etiquetas desde S3
+        print(f"Descargando etiquetas desde S3: {LABELS_S3_URL}")
+        labels_response = requests.get(LABELS_S3_URL, timeout=30)
+        labels_response.raise_for_status()
+        
+        # Crear archivo temporal para las etiquetas
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pkl') as tmp_labels:
+            tmp_labels.write(labels_response.content)
+            tmp_labels_path = tmp_labels.name
+        
+        # Cargar etiquetas desde archivo temporal
+        with open(tmp_labels_path, 'rb') as f:
             label_encoder = joblib.load(f)
         emotion_labels = label_encoder.classes_ if hasattr(label_encoder, 'classes_') else label_encoder
-        print("Etiquetas cargadas:", emotion_labels)
+        print("✅ Etiquetas cargadas desde S3:", emotion_labels)
+        
+        # Limpiar archivo temporal de etiquetas
+        os.remove(tmp_labels_path)
+        
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error de red al descargar desde S3: {e}")
+        model, emotion_labels = None, None
     except Exception as e:
-        print(f"Error al cargar el modelo o las etiquetas: {e}")
+        print(f"❌ Error al cargar el modelo o las etiquetas desde S3: {e}")
         model, emotion_labels = None, None
 
 # ⭐ IMPORTANTE: Cargar el modelo AQUÍ, no dentro de if __name__ == '__main__'
@@ -49,8 +81,8 @@ print("🚀 Iniciando EmoClassifier...")
 load_model_and_labels()
 if model is None or emotion_labels is None:
     print("❌ ERROR: No se pudo cargar el modelo o las etiquetas.")
-    print(f"- Modelo: {MODEL_PATH}")
-    print(f"- Labels: {LABELS_PATH}")
+    print(f"- Modelo S3: {MODEL_S3_URL}")
+    print(f"- Labels S3: {LABELS_S3_URL}")
 else:
     print("✅ Modelo y etiquetas cargados correctamente.")
     print(f"✅ Emociones disponibles: {list(emotion_labels)}")
@@ -209,7 +241,9 @@ def health_check():
         'model_loaded': model is not None,
         'labels_loaded': emotion_labels is not None,
         'available_emotions': list(emotion_labels) if emotion_labels is not None else [],
-        'model_input_shape': str(model.input_shape) if model is not None else None
+        'model_input_shape': str(model.input_shape) if model is not None else None,
+        'model_source': 'S3',
+        'model_url': MODEL_S3_URL
     }
     return jsonify(status)
 

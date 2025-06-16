@@ -1,1 +1,1 @@
-web: python download_model.py && python app.py
+web: python app.py
