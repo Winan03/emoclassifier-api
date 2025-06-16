@@ -43,6 +43,18 @@ def load_model_and_labels():
         print(f"Error al cargar el modelo o las etiquetas: {e}")
         model, emotion_labels = None, None
 
+# ⭐ IMPORTANTE: Cargar el modelo AQUÍ, no dentro de if __name__ == '__main__'
+print("🚀 Iniciando EmoClassifier...")
+load_model_and_labels()
+if model is None or emotion_labels is None:
+    print("❌ ERROR: No se pudo cargar el modelo o las etiquetas.")
+    print(f"- Modelo: {MODEL_PATH}")
+    print(f"- Labels: {LABELS_PATH}")
+else:
+    print("✅ Modelo y etiquetas cargados correctamente.")
+    print(f"✅ Emociones disponibles: {list(emotion_labels)}")
+    print(f"✅ Input shape del modelo: {model.input_shape}")
+
 def spectrogram_to_base64(spectrogram_array):
     try:
         img_array = (spectrogram_array * 255).astype(np.uint8) if spectrogram_array.max() <= 1.0 else np.clip(spectrogram_array, 0, 255).astype(np.uint8)
@@ -237,15 +249,6 @@ def test_real_audio():
         'emotion_labels': [str(e) for e in emotion_labels]
     })
 
+# ⭐ Solo para desarrollo local
 if __name__ == '__main__':
-    print("🚀 Iniciando EmoClassifier...")
-    load_model_and_labels()
-    if model is None or emotion_labels is None:
-        print("❌ ERROR: No se pudo cargar el modelo o las etiquetas.")
-        print(f"- Modelo: {MODEL_PATH}")
-        print(f"- Labels: {LABELS_PATH}")
-    else:
-        print("✅ Modelo y etiquetas cargados correctamente.")
-        print(f"✅ Emociones disponibles: {list(emotion_labels)}")
-        print(f"✅ Input shape del modelo: {model.input_shape}")
     app.run(debug=True, port=5000, host='0.0.0.0')
