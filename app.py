@@ -1,3 +1,4 @@
+print("===> INICIANDO APP.PY <===")
 import os
 import io
 import tempfile

@@ -21,4 +21,4 @@ RUN python download_model.py
 EXPOSE 5000
 
 # Comando para iniciar la app con gunicorn (ajusta si tu archivo principal se llama diferente)
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
+CMD ["python", "app.py"]
