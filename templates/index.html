@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EmoClassifier - Clasificador de Emociones por Voz</title>
+    
+    <!-- Estilos CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index1.css') }}">
+    
+    <!-- FontAwesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+</head>
+<body>
+    <!-- Header de navegación -->
+    <header class="header">
+        <nav class="nav-container">
+            <div class="logo">
+                <i class="fas fa-brain"></i>
+                <span>EmoClassifier</span>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="#inicio" class="nav-link active">Inicio</a></li>
+                <li><a href="#como-funciona" class="nav-link">Cómo Funciona</a></li>
+                <li><a href="#acerca" class="nav-link">Acerca</a></li>
+            </ul>
+            <div class="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <!-- Sección Principal - Inicio -->
+        <section id="inicio" class="main-section">
+            <div class="hero-container">
+                <div class="hero-content">
+                    <h1 class="hero-title">
+                        <span class="gradient-text">EmoClassifier</span>
+                        <br>Detecta Emociones en tu Voz
+                    </h1>
+                    <p class="hero-subtitle">
+                        Utiliza inteligencia artificial avanzada para analizar las emociones 
+                        expresadas en tu voz a través de espectrogramas de mel.
+                    </p>
+                    
+                    <!-- Selector de modo -->
+                    <div class="mode-selector">
+                        <button class="mode-btn active" data-mode="record">
+                            <i class="fas fa-microphone"></i>
+                            <span>Grabar Audio</span>
+                        </button>
+                        <button class="mode-btn" data-mode="upload">
+                            <i class="fas fa-upload"></i>
+                            <span>Subir Archivo</span>
+                        </button>
+                    </div>
+
+                    <!-- INICIA: NUEVO WRAPPER PARA ÁREAS DE ENTRADA -->
+                    <div id="inputAreaWrapper" class="input-area-wrapper">
+                        <!-- Área de grabación -->
+                        <div id="record-area" class="input-area active">
+                            <div class="record-container">
+                                <div class="record-button-container">
+                                    <button id="recordBtn" class="record-btn">
+                                        <i class="fas fa-microphone"></i>
+                                    </button>
+                                    <div class="record-status">
+                                        <span id="recordStatus">Presiona para grabar</span>
+                                        <div id="recordTimer" class="record-timer">0:00</div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Visualizador de audio -->
+                                <div id="audioVisualizer" class="audio-visualizer">
+                                    <canvas id="visualizerCanvas"></canvas>
+                                </div>
+
+                                <!-- Controles de grabación -->
+                                <div id="recordControls" class="record-controls hidden">
+                                    <button id="playRecordedBtn" class="control-btn">
+                                        <i class="fas fa-play"></i>
+                                    </button>
+                                    <button id="pauseRecordedBtn" class="control-btn hidden">
+                                        <i class="fas fa-pause"></i>
+                                    </button>
+                                    <button id="stopRecordedBtn" class="control-btn">
+                                        <i class="fas fa-stop"></i>
+                                    </button>
+                                    <button id="deleteRecordedBtn" class="control-btn delete">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Área de subida de archivos -->
+                        <div id="upload-area" class="input-area">
+                            <div class="upload-container">
+                                <div class="upload-zone" id="uploadZone">
+                                    <div class="upload-icon">
+                                        <i class="fas fa-cloud-upload-alt"></i>
+                                    </div>
+                                    <p class="upload-text">
+                                        Arrastra tu archivo de audio aquí<br>
+                                        <span class="upload-subtext">o haz clic para seleccionar</span>
+                                    </p>
+                                    <input type="file" id="audioFileInput" accept=".wav,.mp3,.m4a,.ogg,.webm" hidden>
+                                    <div class="file-formats">
+                                        Formatos soportados: WAV, MP3, M4A, OGG, WebM
+                                    </div>
+                                </div>
+                                
+                                <!-- Información del archivo subido -->
+                                <div id="uploadedFileInfo" class="uploaded-file-info hidden">
+                                    <div class="file-details">
+                                        <i class="fas fa-music"></i>
+                                        <div class="file-text">
+                                            <span id="fileName">archivo.wav</span>
+                                            <span id="fileSize">2.1 MB</span>
+                                        </div>
+                                        <button id="removeFileBtn" class="remove-file-btn">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- TERMINA: NUEVO WRAPPER PARA ÁREAS DE ENTRADA -->
+
+                    <!-- Botón de procesar -->
+                    <button id="processBtn" class="process-btn disabled" disabled>
+                        <i class="fas fa-brain"></i>
+                        <span>Analizar Emoción</span>
+                    </button>
+
+                    <!-- Indicadores de estado -->
+                    <div class="status-indicators">
+                        <div class="status-item">
+                            <i class="fas fa-microphone-alt"></i>
+                            <span>Micrófono Listo</span>
+                        </div>
+                        <div class="status-item">
+                            <i class="fas fa-robot"></i>
+                            <span>IA Preparada</span>
+                        </div>
+                        <div class="status-item">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>Privacidad Garantizada</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sección de Carga -->
+        <section id="loadingSection" class="loading-section">
+            <div class="loading-container">
+                <div class="loading-animation">
+                    <div class="sound-wave">
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                    </div>
+                </div>
+                
+                <h2 class="loading-title">Analizando tu Voz</h2>
+                <p class="loading-subtitle">Procesando señales de audio y generando espectrograma...</p>
+                
+                <div class="loading-steps">
+                    <div class="step-item active" data-step="1">
+                        <div class="step-icon"><i class="fas fa-file-audio"></i></div>
+                        <span>Procesando Audio</span>
+                    </div>
+                    <div class="step-item" data-step="2">
+                        <div class="step-icon"><i class="fas fa-chart-line"></i></div>
+                        <span>Generando Espectrograma</span>
+                    </div>
+                    <div class="step-item" data-step="3">
+                        <div class="step-icon"><i class="fas fa-brain"></i></div>
+                        <span>Clasificando Emoción</span>
+                    </div>
+                </div>
+                
+                <div class="progress-bar-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+                    <span class="progress-text">0%</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sección de Resultados -->
+        <section id="resultsSection" class="results-section">
+            <div class="results-container">
+                <div class="results-header">
+                    <h2 class="results-title">Resultado del Análisis</h2>
+                    <p class="results-subtitle">Tu voz expresa la siguiente emoción:</p>
+                </div>
+
+                <div class="emotion-result">
+                    <div class="emotion-display">
+                        <div class="emotion-icon" id="emotionIcon">
+                            <i class="fas fa-smile-beam"></i>
+                        </div>
+                        <div class="emotion-info">
+                            <h3 class="emotion-label" id="emotionLabel">Alegría</h3>
+                            <div class="confidence-container">
+                                <div class="confidence-bar">
+                                    <div class="confidence-fill" id="confidenceFill"></div>
+                                </div>
+                                <span class="confidence-value" id="confidenceValue">85.2%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Espectrograma -->
+                <div class="spectrogram-section">
+                    <h4 class="section-title">
+                        <i class="fas fa-chart-area"></i>
+                        Espectrograma de Mel
+                    </h4>
+                    <div class="spectrogram-container">
+                        <img id="spectrogramImage" src="" alt="Espectrograma" class="spectrogram-img">
+                        <div class="spectrogram-info">
+                            <p>El espectrograma muestra las características frecuenciales de tu voz que la IA utiliza para detectar emociones.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reproductor de audio -->
+                <div class="audio-section">
+                    <h4 class="section-title">
+                        <i class="fas fa-volume-up"></i>
+                        Audio Analizado
+                    </h4>
+                    <div class="custom-audio-player">
+                        <audio id="audioPlayer" preload="metadata" controls></audio>
+                        <div class="audio-controls">
+                            <button id="playBtn" class="play-btn">
+                                <i class="fas fa-play"></i>
+                            </button>
+                            <div class="progress-container">
+                                <div class="progress-bar">
+                                    <div class="progress-fill"></div>
+                                </div>
+                                <div class="time-display">0:00 / 0:00</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Análisis detallado -->
+                <div class="detailed-analysis">
+                    <h4 class="section-title">
+                        <i class="fas fa-analytics"></i>
+                        Análisis Detallado
+                    </h4>
+                    <div class="probability-bars" id="probabilityBars">
+                        <!-- Se llenará dinámicamente con JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Botones de acción -->
+                <div class="action-buttons">
+                    <button id="tryAgainBtn" class="action-btn secondary">
+                        <i class="fas fa-redo"></i>
+                        Analizar Otro Audio
+                    </button>
+                    <button id="shareBtn" class="action-btn primary">
+                        <i class="fas fa-share-alt"></i>
+                        Compartir Resultado
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sección Cómo Funciona -->
+        <section id="como-funciona" class="info-section">
+            <div class="info-container">
+                <h2 class="section-title">¿Cómo Funciona?</h2>
+                <div class="steps-grid">
+                    <div class="step-card">
+                        <div class="step-number">1</div>
+                        <div class="step-icon"><i class="fas fa-microphone"></i></div>
+                        <h3>Captura de Audio</h3>
+                        <p>Graba tu voz o sube un archivo de audio en formatos compatibles.</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-number">2</div>
+                        <div class="step-icon"><i class="fas fa-wave-square"></i></div>
+                        <h3>Procesamiento</h3>
+                        <p>Convertimos tu audio en un espectrograma de mel que revela patrones únicos.</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-number">3</div>
+                        <div class="step-icon"><i class="fas fa-brain"></i></div>
+                        <h3>Análisis IA</h3>
+                        <p>Nuestra red neuronal VGG16 entrenada clasifica la emoción expresada.</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-number">4</div>
+                        <div class="step-icon"><i class="fas fa-chart-pie"></i></div>
+                        <h3>Resultados</h3>
+                        <p>Obtienes la emoción detectada con su nivel de confianza y análisis visual.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sección Acerca -->
+        <section id="acerca" class="info-section">
+            <div class="info-container">
+                <h2 class="section-title">Acerca de EmoClassifier</h2>
+                <div class="about-content">
+                    <div class="about-text">
+                        <p>
+                            EmoClassifier es una aplicación de inteligencia artificial que utiliza 
+                            técnicas avanzadas de procesamiento de señales de audio y aprendizaje 
+                            profundo para detectar emociones en la voz humana.
+                        </p>
+                        <p>
+                            Nuestro modelo está basado en la arquitectura VGG16 y ha sido entrenado 
+                            específicamente para reconocer patrones emocionales en espectrogramas 
+                            de mel, proporcionando análisis precisos y confiables.
+                        </p>
+                    </div>
+                    <div class="tech-stack">
+                        <h3>Tecnologías Utilizadas</h3>
+                        <div class="tech-grid">
+                            <div class="tech-item">
+                                <i class="fab fa-python"></i>
+                                <span>Python</span>
+                            </div>
+                            <div class="tech-item">
+                                <i class="fas fa-brain"></i>
+                                <span>TensorFlow</span>
+                            </div>
+                            <div class="tech-item">
+                                <i class="fas fa-flask"></i>
+                                <span>Flask</span>
+                            </div>
+                            <div class="tech-item">
+                                <i class="fab fa-js-square"></i>
+                                <span>JavaScript</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h3>EmoClassifier</h3>
+                <p>Detecta emociones en tu voz con IA avanzada.</p>
+            </div>
+            <div class="footer-section">
+                <h4>Enlaces</h4>
+                <ul>
+                    <li><a href="#inicio">Inicio</a></li>
+                    <li><a href="#como-funciona">Cómo Funciona</a></li>
+                    <li><a href="#acerca">Acerca</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h4>Privacidad</h4>
+                <p>Tu audio se procesa localmente y no se almacena en nuestros servidores.</p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2024 EmoClassifier. Todos los derechos reservados.</p>
+        </div>
+    </footer>
+
+    <!-- Modal para espectrograma ampliado -->
+    <div id="spectrogramModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close">&times;</span>
+            <img id="modalSpectrogramImage" src="" alt="Espectrograma ampliado">
+            <div class="modal-info">
+                <h3>Espectrograma de Mel</h3>
+                <p>Representación visual de las frecuencias de tu voz a lo largo del tiempo.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts JavaScript -->
+    <script src="{{ url_for('static', filename='js/animations.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/audio-recorder.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

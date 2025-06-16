@@ -1,0 +1,8 @@
+Flask
+Flask-Cors
+numpy
+tensorflow
+librosa
+matplotlib
+opencv-python-headless
+soundfile
