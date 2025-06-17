@@ -119,7 +119,8 @@ def spectrogram_to_base64(spectrogram_array):
         print(f"Error al convertir espectrograma a base64: {e}")
         return None
 
-print("🚀 Cargando modelo y etiquetas al iniciar servidor...")
+# 🔥 LÍNEA CLAVE: Cargar modelo SIEMPRE, no solo en __main__
+print("🚀 Cargando modelo y etiquetas al iniciar aplicación Flask...")
 load_model_and_labels()
 
 @app.route('/')
@@ -358,8 +359,9 @@ def test_pipeline():
     except Exception as e:
         return jsonify({'pipeline_test': 'failed', 'error': str(e)}), 500
 
+# 🎯 PUNTO CLAVE: Manejar inicialización para desarrollo local
 if __name__ == '__main__':
-    print("🚀 Iniciando EmoClassifier...")
+    print("🚀 Iniciando EmoClassifier en modo desarrollo...")
         
     if interpreter is None or emotion_labels is None:
         print("❌ ERROR: No se pudo cargar el modelo o las etiquetas.")
@@ -371,5 +373,5 @@ if __name__ == '__main__':
         print(f"✅ Emociones disponibles: {list(emotion_labels)}")
         print(f"✅ Input shape del modelo: {input_details[0]['shape']}")
     
-    # Iniciar Flask
+    # Iniciar Flask en modo desarrollo
     app.run(debug=True, port=5000, host='0.0.0.0')

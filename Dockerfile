@@ -1,4 +1,4 @@
-# Usar Python 3.10 que es compatible con TensorFlow 2.11.0
+# Usar Python 3.10 que es compatible con TensorFlow
 FROM python:3.10-slim
 
 # Establecer el directorio de trabajo
@@ -26,16 +26,13 @@ RUN apt-get update && apt-get install -y \
 # Actualizar pip y instalar wheel para builds más rápidos
 RUN pip install --upgrade pip wheel setuptools
 
-# Copiar requirements.txt primero
+# Copiar requirements.txt primero (para aprovechar Docker cache)
 COPY requirements.txt .
 
-# Instalar TensorFlow primero (es la dependencia más pesada)
-RUN pip install --no-cache-dir tensorflow==2.11.0
-
-# Instalar el resto de dependencias
+# Instalar todas las dependencias
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar el código de la aplicación
+# Copiar todo el código de la aplicación
 COPY . .
 
 # Crear directorios necesarios si no existen
@@ -44,29 +41,34 @@ RUN mkdir -p models static/css static/js templates utils logs
 # Verificar que los archivos críticos existen
 RUN echo "Verificando estructura de archivos..." && \
     ls -la . && \
-    ls -la models/ || echo "⚠️ Directorio models/ vacío - asegúrate de incluir tus archivos .tflite y .pkl" && \
-    ls -la utils/ || echo "⚠️ Directorio utils/ vacío"
+    ls -la models/ && \
+    ls -la utils/ && \
+    echo "✅ Estructura verificada"
 
 # Configurar variables de entorno
 ENV FLASK_APP=app.py
 ENV FLASK_ENV=production
 ENV PYTHONPATH=/app
 ENV TF_CPP_MIN_LOG_LEVEL=2
-# Optimizaciones para TensorFlow
 ENV TF_ENABLE_ONEDNN_OPTS=0
 ENV CUDA_VISIBLE_DEVICES=""
+
+# 🔥 IMPORTANTE: Render asigna el puerto dinámicamente
+# Usar la variable de entorno PORT que Render proporciona
+ENV PORT=5000
 
 # Crear usuario no-root para mayor seguridad
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 RUN chown -R appuser:appuser /app
 USER appuser
 
-# Exponer el puerto
-EXPOSE 5000
+# 🎯 CLAVE: Exponer el puerto dinámico de Render
+EXPOSE $PORT
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:5000/health || exit 1
+# Healthcheck usando la variable PORT
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:$PORT/health || exit 1
 
-# Comando para ejecutar la aplicación
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--timeout", "120", "--max-requests", "100", "--preload", "app:app"]
+# 🚀 COMANDO CORREGIDO PARA RENDER
+# Render espera que uses $PORT, no un puerto fijo
+CMD gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --max-requests 100 --preload app:app
