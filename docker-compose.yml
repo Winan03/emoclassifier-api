@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  emoclassifier:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - TF_CPP_MIN_LOG_LEVEL=2
+      - PYTHONPATH=/app
+    volumes:
+      # Solo para desarrollo - montar código fuente
+      # - .:/app
+      # Para persistir logs (opcional)
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Servicio opcional para desarrollo con hot reload
+  emoclassifier-dev:
+    build: .
+    ports:
+      - "5001:5000"
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - TF_CPP_MIN_LOG_LEVEL=2
+      - PYTHONPATH=/app
+    volumes:
+      - .:/app
+    command: python app.py
+    profiles:
+      - dev

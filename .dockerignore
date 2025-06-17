@@ -1,0 +1,62 @@
+# Archivos de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.tox
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git
+.mypy_cache
+.pytest_cache
+.hypothesis
+
+# Entornos virtuales
+venv/
+venv-audio-emocion/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Archivos de desarrollo
+*.md
+README.md
+.gitignore
+.git/
+
+# Archivos temporales
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Firebase (si no es necesario en producción)
+.firebase/
+firebase.json
+.firebaserc
