@@ -119,6 +119,9 @@ def spectrogram_to_base64(spectrogram_array):
         print(f"Error al convertir espectrograma a base64: {e}")
         return None
 
+print("🚀 Cargando modelo y etiquetas al iniciar servidor...")
+load_model_and_labels()
+
 @app.route('/')
 def index():
     """Ruta principal que renderiza la página HTML."""
@@ -357,8 +360,7 @@ def test_pipeline():
 
 if __name__ == '__main__':
     print("🚀 Iniciando EmoClassifier...")
-    load_model_and_labels()
-    
+        
     if interpreter is None or emotion_labels is None:
         print("❌ ERROR: No se pudo cargar el modelo o las etiquetas.")
         print("Verifica que los archivos existan en las rutas especificadas:")
