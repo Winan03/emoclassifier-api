@@ -1,74 +1,56 @@
-# Usar Python 3.10 que es compatible con TensorFlow
-FROM python:3.10-slim
+# Usar imagen base oficial de Python 3.11 slim
+FROM python:3.11-slim
 
-# Establecer el directorio de trabajo
+# Establecer directorio de trabajo
 WORKDIR /app
+
+# Crear usuario no-root ANTES de instalar dependencias
+RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 # Instalar dependencias del sistema necesarias
 RUN apt-get update && apt-get install -y \
-    # Para librosa y procesamiento de audio
     libsndfile1 \
-    ffmpeg \
-    # Para OpenCV
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
     libgomp1 \
-    # Para compilación de algunas dependencias
-    gcc \
-    g++ \
-    # Para descargas (curl para healthcheck)
-    curl \
-    # Limpieza
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Actualizar pip y instalar wheel para builds más rápidos
-RUN pip install --upgrade pip wheel setuptools
+# Configurar variables de entorno para evitar errores de permisos
+ENV MPLCONFIGDIR=/tmp/matplotlib
+ENV FONTCONFIG_PATH=/tmp/fontconfig
+ENV HOME=/tmp
 
-# Copiar requirements.txt primero (para aprovechar Docker cache)
+# Crear directorios temporales con permisos correctos
+RUN mkdir -p /tmp/matplotlib /tmp/fontconfig && \
+    chmod 755 /tmp/matplotlib /tmp/fontconfig
+
+# Copiar requirements y instalar dependencias Python
 COPY requirements.txt .
-
-# Instalar todas las dependencias
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copiar todo el código de la aplicación
 COPY . .
 
-# Crear directorios necesarios si no existen
+# Crear directorios necesarios
 RUN mkdir -p models static/css static/js templates utils logs
 
-# Verificar que los archivos críticos existen
+# Cambiar propietario de todos los archivos a appuser
+RUN chown -R appuser:appuser /app && \
+    chown -R appuser:appuser /tmp/matplotlib && \
+    chown -R appuser:appuser /tmp/fontconfig
+
+# Verificar estructura de archivos
 RUN echo "Verificando estructura de archivos..." && \
     ls -la . && \
     ls -la models/ && \
     ls -la utils/ && \
     echo "✅ Estructura verificada"
 
-# Configurar variables de entorno
-ENV FLASK_APP=app.py
-ENV FLASK_ENV=production
-ENV PYTHONPATH=/app
-ENV TF_CPP_MIN_LOG_LEVEL=2
-ENV TF_ENABLE_ONEDNN_OPTS=0
-ENV CUDA_VISIBLE_DEVICES=""
-
-# 🔥 IMPORTANTE: Render asigna el puerto dinámicamente
-# Usar la variable de entorno PORT que Render proporciona
-ENV PORT=5000
-
-# Crear usuario no-root para mayor seguridad
-RUN groupadd -r appuser && useradd -r -g appuser appuser
-RUN chown -R appuser:appuser /app
+# Cambiar a usuario no-root
 USER appuser
 
-# 🎯 CLAVE: Exponer el puerto dinámico de Render
-EXPOSE $PORT
+# Exponer puerto
+EXPOSE 10000
 
-# Healthcheck usando la variable PORT
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:$PORT/health || exit 1
-
-# 🚀 COMANDO CORREGIDO PARA RENDER
-# Render espera que uses $PORT, no un puerto fijo
-CMD gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --max-requests 100 --preload app:app
+# Comando de inicio con gunicorn optimizado
+CMD ["gunicorn", "--bind", "0.0.0.0:10000", "--workers", "1", "--timeout", "120", "--preload", "app:app"]
