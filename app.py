@@ -23,7 +23,10 @@ CORS(app)
 MODEL_PATH = 'models/emotion_vgg16.tflite'
 LABELS_PATH = 'models/label_encoder.pkl'
 
+# Variables globales para el modelo
 interpreter = None
+input_details = None
+output_details = None
 emotion_labels = None
 
 def load_model_and_labels():
@@ -65,6 +68,29 @@ def load_model_and_labels():
         output_details = None
         emotion_labels = None
 
+def predict_with_tflite(input_data):
+    """Realiza predicción usando el modelo TensorFlow Lite."""
+    global interpreter, input_details, output_details
+    
+    try:
+        # Asegurar que el input tenga el tipo correcto
+        input_data = input_data.astype(np.float32)
+        
+        # Configurar tensor de entrada
+        interpreter.set_tensor(input_details[0]['index'], input_data)
+        
+        # Ejecutar inferencia
+        interpreter.invoke()
+        
+        # Obtener resultado
+        output_data = interpreter.get_tensor(output_details[0]['index'])
+        
+        return output_data
+        
+    except Exception as e:
+        print(f"Error durante la predicción TFLite: {e}")
+        return None
+
 def spectrogram_to_base64(spectrogram_array):
     """Convierte el array del espectrograma a imagen base64 para el frontend."""
     try:
@@ -102,7 +128,7 @@ def index():
 def predict():
     """Ruta para la predicción de emoción a partir de un archivo de audio real."""
     
-    if model is None or emotion_labels is None:
+    if interpreter is None or emotion_labels is None:
         return jsonify({'error': 'El modelo o las etiquetas no se han cargado correctamente. Reinicia el servidor.'}), 500
 
     # Verificar que la solicitud tenga contenido
@@ -191,9 +217,13 @@ def predict():
         model_input = np.expand_dims(processed_spectrogram, axis=0)
         print(f"📊 Input para modelo: {model_input.shape}")
 
-        # PASO 4: Predicción
+        # PASO 4: Predicción usando TensorFlow Lite
         print("🤖 Realizando predicción...")
-        predictions = model.predict(model_input, verbose=0)
+        predictions = predict_with_tflite(model_input)
+        
+        if predictions is None:
+            return jsonify({'error': 'Error durante la predicción del modelo.'}), 500
+            
         predicted_class_index = np.argmax(predictions, axis=1)[0]
         confidence = float(predictions[0][predicted_class_index])
 
@@ -225,9 +255,10 @@ def predict():
             'all_probabilities': all_probabilities_list,
             'spectrogram_data': spectrogram_b64,
             'model_info': {
-                'input_shape': str(model.input_shape),
+                'input_shape': str(input_details[0]['shape']),
                 'total_classes': len(emotion_labels),
-                'preprocessing_method': 'minmax_normalization'
+                'preprocessing_method': 'minmax_normalization',
+                'model_type': 'TensorFlow Lite'
             },
             'audio_info': {
                 'duration_seconds': 3.0,
@@ -259,10 +290,11 @@ def health_check():
     """Endpoint para verificar el estado del servidor y modelo."""
     status = {
         'server': 'running',
-        'model_loaded': model is not None,
+        'model_loaded': interpreter is not None,
         'labels_loaded': emotion_labels is not None,
         'available_emotions': list(emotion_labels) if emotion_labels is not None else [],
-        'model_input_shape': str(model.input_shape) if model is not None else None
+        'model_input_shape': str(input_details[0]['shape']) if input_details is not None else None,
+        'model_type': 'TensorFlow Lite'
     }
     return jsonify(status)
 
@@ -298,9 +330,13 @@ def test_pipeline():
         if processed_spec is None:
             return jsonify({'error': 'Error preprocesando espectrograma de prueba'}), 500
             
-        # Predicción de prueba
+        # Predicción de prueba usando TFLite
         model_input = np.expand_dims(processed_spec, axis=0)
-        predictions = model.predict(model_input, verbose=0)
+        predictions = predict_with_tflite(model_input)
+        
+        if predictions is None:
+            return jsonify({'error': 'Error en predicción de prueba'}), 500
+            
         predicted_class = np.argmax(predictions)
         
         # Limpiar archivo temporal
@@ -312,7 +348,8 @@ def test_pipeline():
             'processed_shape': processed_spec.shape,
             'model_input_shape': model_input.shape,
             'predicted_emotion': emotion_labels[predicted_class],
-            'confidence': float(predictions[0][predicted_class])
+            'confidence': float(predictions[0][predicted_class]),
+            'model_type': 'TensorFlow Lite'
         })
         
     except Exception as e:
@@ -322,7 +359,7 @@ if __name__ == '__main__':
     print("🚀 Iniciando EmoClassifier...")
     load_model_and_labels()
     
-    if model is None or emotion_labels is None:
+    if interpreter is None or emotion_labels is None:
         print("❌ ERROR: No se pudo cargar el modelo o las etiquetas.")
         print("Verifica que los archivos existan en las rutas especificadas:")
         print(f"- Modelo: {MODEL_PATH}")
@@ -330,7 +367,7 @@ if __name__ == '__main__':
     else:
         print("✅ Modelo y etiquetas cargados correctamente.")
         print(f"✅ Emociones disponibles: {list(emotion_labels)}")
-        print(f"✅ Input shape del modelo: {model.input_shape}")
+        print(f"✅ Input shape del modelo: {input_details[0]['shape']}")
     
     # Iniciar Flask
     app.run(debug=True, port=5000, host='0.0.0.0')
