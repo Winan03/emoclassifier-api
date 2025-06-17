@@ -11,6 +11,7 @@ import joblib
 import numpy as np
 import tensorflow as tf
 from PIL import Image
+import importlib.metadata
 
 # 1. Configuración avanzada de logging
 def setup_logging(app):
