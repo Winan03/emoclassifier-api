@@ -1,8 +1,0 @@
-# .gitignore
-models/
-*.pyc
-__pycache__/
-*.h5
-*.keras
-*.pkl
-.env
