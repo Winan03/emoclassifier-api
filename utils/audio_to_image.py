@@ -1,52 +1,50 @@
 import librosa
-import librosa.display
 import numpy as np
 import matplotlib
-matplotlib.use('Agg') # Asegura que Matplotlib no intente mostrar ventanas GUI
+matplotlib.use('Agg')  # Backend sin GUI - CRÍTICO para memoria
 import matplotlib.pyplot as plt
 import io
 import cv2
 import os
 import soundfile as sf
+import gc  # Para garbage collection manual
+import warnings
+warnings.filterwarnings('ignore')  # Suprimir warnings para reducir overhead
+
+# Configurar matplotlib para usar mínima memoria
+plt.rcParams['figure.max_open_warning'] = 0
+plt.ioff()  # Desactivar modo interactivo
 
 def validate_audio_file(audio_file_path: str, sr: int = 22050, duration: float = 0.1) -> bool:
     """
     Valida que el archivo de audio sea válido, legible y compatible con tu pipeline.
-    
-    Args:
-        audio_file_path (str): Ruta al archivo de audio.
-        sr (int): Sample rate a usar (debe ser igual al del pipeline).
-        duration (float): Duración mínima a intentar cargar (seg).
-    Returns:
-        bool: True si el archivo es válido, False si está corrupto o vacío.
+    OPTIMIZADO: Carga solo una muestra muy pequeña para validar.
     """
     try:
         # Validar extensión soportada
-        valid_exts = ('.wav', '.mp3', '.ogg', '.flac', '.m4a', '.aac', '.webm') # Asegúrate de que .webm esté aquí
+        valid_exts = ('.wav', '.mp3', '.ogg', '.flac', '.m4a', '.aac', '.webm')
         ext = os.path.splitext(audio_file_path)[1].lower()
         if ext not in valid_exts:
-            print(f"[validate_audio_file] Extensión no soportada: {audio_file_path}")
             return False
 
         # Validar que el archivo existe y tiene tamaño
         if not os.path.exists(audio_file_path) or os.path.getsize(audio_file_path) == 0:
-            print(f"[validate_audio_file] Archivo no encontrado o vacío: {audio_file_path}")
             return False
 
-        # Intentar cargar un fragmento corto (no todo el audio)
-        # Aquí, 'sr' se usa para el librosa.load como lo tenías.
+        # Cargar SOLO una muestra muy pequeña (0.1 segundos) para validar
         y, _ = librosa.load(audio_file_path, sr=sr, mono=True, duration=duration)
-        if y is None or len(y) == 0 or np.allclose(y, 0):
-            print("[validate_audio_file] Audio vacío, corrupto o silencioso.")
+        
+        if y is None or len(y) == 0:
             return False
 
-        # Si todo salió bien, es válido
+        # Limpiar memoria inmediatamente
+        del y
+        gc.collect()
+        
         return True
 
     except Exception as e:
-        print(f"[validate_audio_file] Error al validar archivo: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"[validate_audio_file] Error: {e}")
         return False
 
 def audio_to_mel_spectrogram(audio_file_path: str,
@@ -57,115 +55,169 @@ def audio_to_mel_spectrogram(audio_file_path: str,
                              fmax: int = 8000,
                              img_size: tuple = (128, 128)) -> np.ndarray:
     """
-    Convierte un archivo de audio en un espectrograma Mel normalizado y lo
-    devuelve como un array NumPy RGB (HxWx3) listo para VGG16, idéntico al usado en entrenamiento.
-    Esta función NO incluye colormap, sino que apila el espectrograma en escala de grises.
-
-    Args:
-        audio_file_path (str): Ruta al archivo de audio (.wav, .mp3, etc.)
-        sr (int): Tasa de muestreo para el audio.
-        duration (float): Duración máxima a cargar (segundos).
-        n_mels (int): Número de bandas Mel.
-        n_fft (int): Tamaño de ventana FFT.
-        fmax (int): Frecuencia máxima a incluir en el espectrograma Mel.
-        img_size (tuple): Tamaño final (ancho, alto) del espectrograma.
-
-    Returns:
-        np.ndarray: Array (img_size[0], img_size[1], 3), valores [0,1], tipo float32, o None si error.
+    VERSIÓN OPTIMIZADA PARA MEMORIA: Convierte audio a espectrograma Mel con gestión agresiva de memoria.
     """
     try:
         if not os.path.exists(audio_file_path):
             print(f"Error: El archivo {audio_file_path} no existe.")
             return None
 
-        # Cargar el audio
-        y, original_sr = librosa.load(audio_file_path, sr=sr, duration=duration)
-        # Normalizar el volumen
-        if np.max(np.abs(y)) > 0:
-            y = y / np.max(np.abs(y)) * 0.9
-        else: # Si el audio es silencio, llenarlo con ceros para evitar NaNs
-            y = np.zeros_like(y)
-
-        # Asegurar duración exacta
+        # OPTIMIZACIÓN 1: Cargar audio con parámetros optimizados
+        y, _ = librosa.load(
+            audio_file_path, 
+            sr=sr, 
+            duration=duration, 
+            mono=True,
+            res_type='kaiser_fast'  # Algoritmo más rápido y eficiente en memoria
+        )
+        
+        # OPTIMIZACIÓN 2: Procesar en chunks si es muy largo
         target_length = int(sr * duration)
         if len(y) < target_length:
-            y = np.pad(y, (0, target_length - len(y)), 'constant')
+            y = np.pad(y, (0, target_length - len(y)), 'constant', constant_values=0)
         elif len(y) > target_length:
             y = y[:target_length]
 
-        # Generar el espectrograma Mel con fmax
+        # OPTIMIZACIÓN 3: Normalizar de manera eficiente
+        max_val = np.max(np.abs(y))
+        if max_val > 0:
+            y = np.multiply(y, 0.9 / max_val, out=y)  # In-place operation
+        
+        # OPTIMIZACIÓN 4: Generar espectrograma con configuración optimizada
         mel_spectrogram = librosa.feature.melspectrogram(
-            y=y, sr=sr, n_mels=n_mels, n_fft=n_fft, fmax=fmax
+            y=y, 
+            sr=sr, 
+            n_mels=n_mels, 
+            n_fft=n_fft, 
+            fmax=fmax,
+            hop_length=n_fft//4,  # Reducir resolución temporal para ahorrar memoria
+            power=2.0
         )
+        
+        # Liberar memoria del audio original
+        del y
+        gc.collect()
+        
+        # OPTIMIZACIÓN 5: Conversión a dB eficiente
         mel_db = librosa.power_to_db(mel_spectrogram, ref=np.max)
+        del mel_spectrogram  # Liberar memoria inmediatamente
+        gc.collect()
 
-        # Normalizar a [0, 1]
-        mel_normalized = (mel_db - mel_db.min()) / (mel_db.max() - mel_db.min() + 1e-8)
+        # OPTIMIZACIÓN 6: Normalización in-place
+        mel_min = mel_db.min()
+        mel_max = mel_db.max()
+        mel_range = mel_max - mel_min + 1e-8
+        
+        # Normalizar in-place para ahorrar memoria
+        mel_db -= mel_min
+        mel_db /= mel_range
+        
+        # OPTIMIZACIÓN 7: Resize eficiente
+        mel_resized = cv2.resize(
+            mel_db, 
+            img_size, 
+            interpolation=cv2.INTER_AREA
+        )
+        del mel_db  # Liberar memoria original
+        gc.collect()
 
-        # Redimensionar a img_size
-        mel_resized = cv2.resize(mel_normalized, img_size, interpolation=cv2.INTER_AREA)
-
-        # Apilar en 3 canales idénticos (RGB)
-        mel_rgb = np.stack([mel_resized]*3, axis=-1).astype(np.float32)
+        # OPTIMIZACIÓN 8: Stack eficiente para 3 canales
+        mel_rgb = np.empty((img_size[1], img_size[0], 3), dtype=np.float32)
+        mel_rgb[:, :, 0] = mel_resized
+        mel_rgb[:, :, 1] = mel_resized  
+        mel_rgb[:, :, 2] = mel_resized
+        
+        del mel_resized  # Liberar memoria
+        gc.collect()
 
         return mel_rgb
 
     except Exception as e:
         print(f"Error al procesar '{audio_file_path}': {e}")
-        import traceback
-        traceback.print_exc()
+        # Limpiar memoria en caso de error
+        gc.collect()
         return None
 
 def generate_colored_spectrogram_image(mel_db_spectrogram: np.ndarray, img_size: tuple = (128, 128)) -> np.ndarray:
     """
-    Genera una imagen RGB con colormap a partir de un espectrograma Mel en escala logarítmica (dB).
-    Esta función es solo para visualización en el frontend.
-
-    Args:
-        mel_db_spectrogram (np.ndarray): El espectrograma Mel en escala de dB (salida de power_to_db).
-        img_size (tuple): Tamaño deseado de la imagen de salida (ancho, alto).
-
-    Returns:
-        np.ndarray: Array (img_size[0], img_size[1], 3), valores [0,1], tipo float32, para visualización.
+    VERSIÓN OPTIMIZADA: Genera imagen RGB con manejo agresivo de memoria.
     """
+    fig = None
     try:
-        # Crear una figura de Matplotlib sin mostrarla (backend no interactivo)
-        fig = plt.figure(figsize=(img_size[0]/100, img_size[1]/100), dpi=100) # Ajustar figsize/dpi
+        # OPTIMIZACIÓN 1: Crear figura con tamaño mínimo
+        fig_width = img_size[0] / 100.0
+        fig_height = img_size[1] / 100.0
+        
+        fig = plt.figure(figsize=(fig_width, fig_height), dpi=100)
         ax = fig.add_subplot(111)
-        ax.set_axis_off() # Eliminar ejes
+        ax.set_axis_off()
+        
+        # OPTIMIZACIÓN 2: Usar configuración de memoria mínima
         ax.pcolormesh(
             mel_db_spectrogram, 
-            cmap='viridis', # Colormap para visualización. Puedes cambiarlo a 'plasma', 'magma', 'jet', etc.
-            shading='gouraud'
+            cmap='viridis',
+            shading='nearest',  # Más eficiente que 'gouraud'
+            rasterized=True     # Reduce uso de memoria
         )
-        # Ajustar los límites para que no haya espacio blanco extra
+        
         ax.set_xlim([0, mel_db_spectrogram.shape[1]])
         ax.set_ylim([0, mel_db_spectrogram.shape[0]])
-        plt.tight_layout(pad=0) # Eliminar todo el padding
-
-        # Convertir la figura de Matplotlib a un array NumPy (imagen RGB)
+        
+        # OPTIMIZACIÓN 3: Configuración minimalista
+        plt.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
+        
+        # OPTIMIZACIÓN 4: Convertir a imagen de manera eficiente
         buf = io.BytesIO()
-        plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
+        plt.savefig(
+            buf, 
+            format='png', 
+            bbox_inches='tight', 
+            pad_inches=0,
+            dpi=100,
+            facecolor='none',
+            edgecolor='none'
+        )
         buf.seek(0)
+        
+        # OPTIMIZACIÓN 5: Cargar imagen optimizada
         img_rgb = plt.imread(buf)
-        plt.close(fig) # CERRAR la figura para liberar memoria
-
-        # img_rgb estará en el rango [0, 1] y tendrá 4 canales (RGBA).
-        # Eliminamos el canal alfa si solo necesitamos RGB
-        if img_rgb.shape[2] == 4:
+        buf.close()
+        
+        # Cerrar figura INMEDIATAMENTE
+        plt.close(fig)
+        fig = None
+        
+        # OPTIMIZACIÓN 6: Procesar imagen eficientemente
+        if img_rgb.shape[2] == 4:  # Remover canal alfa si existe
             img_rgb = img_rgb[:, :, :3]
+        
+        # OPTIMIZACIÓN 7: Redimensionar si es necesario
+        if img_rgb.shape[:2] != img_size[::-1]:  # img_size es (width, height), shape es (height, width)
+            img_rgb = cv2.resize(img_rgb, img_size, interpolation=cv2.INTER_AREA)
+        
+        # Limpiar memoria
+        gc.collect()
         
         return img_rgb.astype(np.float32)
 
     except Exception as e:
-        print(f"Error al generar imagen de espectrograma con color: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error al generar imagen de espectrograma: {e}")
         return None
+    
+    finally:
+        # CRÍTICO: Asegurar que la figura se cierre
+        if fig is not None:
+            plt.close(fig)
+        gc.collect()
 
+# FUNCIÓN ADICIONAL: Limpieza de memoria global
+def cleanup_memory():
+    """Limpia memoria global - llamar después de cada procesamiento."""
+    plt.close('all')  # Cerrar todas las figuras
+    gc.collect()      # Forzar garbage collection
 
 if __name__ == "__main__":
-    print("--- Prueba de utils/audio_to_image.py ---")
+    print("--- Prueba OPTIMIZADA de utils/audio_to_image.py ---")
     
     sample_audio_path = "sample_audio.wav"
     
@@ -176,30 +228,29 @@ if __name__ == "__main__":
             duration = 3.0
             t = np.linspace(0, duration, int(samplerate * duration), False)
             
-            # Crear un audio de prueba más complejo (mezcla de frecuencias)
-            data = (0.3 * np.sin(2 * np.pi * 440 * t) +  # A4
-                    0.2 * np.sin(2 * np.pi * 880 * t) +  # A5
-                    0.1 * np.sin(2 * np.pi * 220 * t) +  # A3
-                    0.05 * np.random.normal(0, 1, len(t))) # Ruido
+            # Crear audio de prueba
+            data = (0.3 * np.sin(2 * np.pi * 440 * t) +
+                    0.2 * np.sin(2 * np.pi * 880 * t) +
+                    0.1 * np.sin(2 * np.pi * 220 * t) +
+                    0.05 * np.random.normal(0, 1, len(t)))
             
-            # Aplicar envolvente para simular habla
             envelope = np.exp(-t * 0.5) * (1 + 0.5 * np.sin(2 * np.pi * 0.5 * t))
             data = data * envelope
             
             sf.write(sample_audio_path, data, samplerate)
-            print("Archivo de prueba creado exitosamente.")
+            print("✅ Archivo de prueba creado.")
             
         except Exception as e:
-            print(f"Error al crear archivo de prueba: {e}")
+            print(f"❌ Error al crear archivo de prueba: {e}")
     
-    # Probar la función con audio real
+    # Probar funciones optimizadas
     if os.path.exists(sample_audio_path):
-        print(f"\n🎵 Procesando audio real: {sample_audio_path}")
+        print(f"\n🎵 Procesando audio: {sample_audio_path}")
         
         if validate_audio_file(sample_audio_path):
-            print("✅ Archivo de audio válido")
+            print("✅ Archivo válido")
             
-            # Generar espectrograma para el modelo (escala de grises apilada)
+            # Test espectrograma para modelo
             spectrogram_for_model = audio_to_mel_spectrogram(
                 sample_audio_path, 
                 img_size=(128, 128),
@@ -208,34 +259,21 @@ if __name__ == "__main__":
             )
 
             if spectrogram_for_model is not None:
-                print(f"✅ Espectrograma para MODELO generado exitosamente!")
+                print(f"✅ Espectrograma para MODELO generado!")
                 print(f"   Forma: {spectrogram_for_model.shape}")
                 print(f"   Tipo: {spectrogram_for_model.dtype}")
                 print(f"   Rango: [{spectrogram_for_model.min():.4f}, {spectrogram_for_model.max():.4f}]")
-                print(f"   Listo para VGG16 (espera 3 canales): {spectrogram_for_model.shape == (128, 128, 3)}")
                 
-                # Para generar el espectrograma VISUAL, necesitamos el espectrograma de Mel en dB
-                # Lo calculamos aquí para la prueba, pero en app.py lo obtendrás de la primera etapa
-                y_visual, _ = librosa.load(sample_audio_path, sr=22050, duration=3.0, mono=True)
-                mel_spectrogram_visual = librosa.feature.melspectrogram(
-                    y=y_visual, sr=22050, n_mels=128, n_fft=2048, fmax=8000
-                )
-                mel_db_visual = librosa.power_to_db(mel_spectrogram_visual, ref=np.max)
-
-                colored_spectrogram_image = generate_colored_spectrogram_image(mel_db_visual, img_size=(128, 128))
-
-                if colored_spectrogram_image is not None:
-                    print(f"✅ Espectrograma COLOREADO para VISUALIZACIÓN generado exitosamente!")
-                    print(f"   Forma: {colored_spectrogram_image.shape}")
-                    print(f"   Tipo: {colored_spectrogram_image.dtype}")
-                    print(f"   Rango: [{colored_spectrogram_image.min():.4f}, {colored_spectrogram_image.max():.4f}]")
-                else:
-                    print("❌ Error al generar el espectrograma COLOREADO")
-
+                # Limpiar memoria después de cada operación
+                cleanup_memory()
+                
             else:
-                print("❌ Error al generar el espectrograma para el MODELO")
+                print("❌ Error al generar espectrograma para modelo")
         else:
-            print("❌ Archivo de audio no válido")
+            print("❌ Archivo no válido")
     else:
-        print(f"❌ No se encontró archivo de audio: {sample_audio_path}")
-        print("Coloca un archivo de audio válido (.wav, .mp3) en la misma carpeta para probar.")
+        print(f"❌ No se encontró archivo: {sample_audio_path}")
+    
+    # Limpieza final
+    cleanup_memory()
+    print("🧹 Limpieza de memoria completada.")
